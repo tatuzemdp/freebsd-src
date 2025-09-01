@@ -142,6 +142,7 @@ struct tv32 {
 #define	F_WAITTIME	0x400000
 #define	F_IP_VLAN_PCP	0x800000
 #define	F_DOT		0x1000000
+#define	F_SO_FIB	0x8000000
 
 /*
  * MAX_DUP_CHK is the number of bits in received table, i.e. the maximum
@@ -215,7 +216,8 @@ ping(int argc, char *const *argv)
 	u_long alarmtimeout;
 	long long ltmp;
 	int almost_done, ch, df, hold, i, icmp_len, mib[4], preload;
-	int ssend_errno, srecv_errno, tos, ttl, pcp;
+	int ssend_errno, srecv_errno, tos, ttl, pcp, fib, numfibs;
+	size_t fiblen = sizeof(fib);
 	char ctrl[CMSG_SPACE(sizeof(struct timespec))];
 	char hnamebuf[MAXHOSTNAMELEN], snamebuf[MAXHOSTNAMELEN];
 #ifdef IP_OPTIONS
@@ -261,7 +263,7 @@ ping(int argc, char *const *argv)
 		err(EX_OSERR, "srecv socket");
 	}
 
-	alarmtimeout = df = preload = tos = pcp = 0;
+	alarmtimeout = df = preload = tos = pcp = fib = numfibs = 0;
 
 	outpack = outpackhdr + sizeof(struct ip);
 	while ((ch = getopt(argc, argv, PING4OPTS)) != -1) {
@@ -303,6 +305,18 @@ ping(int argc, char *const *argv)
 			break;
 		case 'd':
 			options |= F_SO_DEBUG;
+			break;
+		case 'F': /* FIB number to be used */
+			if (sysctlbyname("net.fibs", &numfibs, &fiblen, NULL, 0) == -1)
+				errx(1, "Unable to query available FIBs");
+			ltmp = strtonum(optarg, 0, numfibs-1, &errstr);
+
+			if (errstr != NULL) {
+				errx(EX_USAGE, "Invalid FIB number `%s' (must be between 0 and %d)",
+					 optarg, numfibs - 1);
+			}
+			fib = ltmp;
+			options |= F_SO_FIB;
 			break;
 		case 'f':
 			if (uid) {
@@ -636,7 +650,13 @@ ping(int argc, char *const *argv)
 		(void)setsockopt(ssend, SOL_SOCKET, SO_DEBUG, (char *)&hold,
 		    sizeof(hold));
 		(void)setsockopt(srecv, SOL_SOCKET, SO_DEBUG, (char *)&hold,
-		    sizeof(hold));
+			sizeof(hold));
+	}
+	if (options & F_SO_FIB) {
+		(void)setsockopt(ssend, SOL_SOCKET, SO_FIB, (char *)&fib, 
+			sizeof(fib));
+		(void)setsockopt(srecv, SOL_SOCKET, SO_FIB, (char *)&fib, 
+			sizeof(fib));
 	}
 	if (options & F_SO_DONTROUTE)
 		(void)setsockopt(ssend, SOL_SOCKET, SO_DONTROUTE, (char *)&hold,

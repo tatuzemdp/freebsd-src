@@ -38,7 +38,7 @@
 #else
  #define PING4ADDOPTS
 #endif
-#define PING4OPTS ".::4AaC:c:DdfG:g:Hh:I:i:Ll:M:m:nop:QqRrS:s:T:t:vW:z:" PING4ADDOPTS
+#define PING4OPTS ".::4AaC:c:DdF:fG:g:Hh:I:i:Ll:M:m:nop:QqRrS:s:T:t:vW:z:" PING4ADDOPTS
 
 #if defined(INET6) && defined(IPSEC) && defined(IPSEC_POLICY_IPSEC)
  #define PING6ADDOPTS "P:"
