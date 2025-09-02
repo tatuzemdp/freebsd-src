@@ -92,7 +92,7 @@
 #include <sys/capsicum.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
-
+#include <sys/sysctl.h>
 #include <net/if.h>
 #include <net/route.h>
 
@@ -185,6 +185,7 @@ struct tv32 {
 #define F_NOUSERDATA	(F_NODEADDR | F_FQDN | F_FQDNOLD | F_SUPTYPES)
 #define	F_WAITTIME	0x2000000
 #define	F_DOT		0x4000000
+#define	F_SO_FIB	0x8000000
 
 #define IN6LEN		sizeof(struct in6_addr)
 #define SA6LEN		sizeof(struct sockaddr_in6)
@@ -273,7 +274,11 @@ ping6(int argc, char *argv[])
 	struct addrinfo hints, *res;
 	struct sigaction si_sa;
 	int cc, i;
-	int almost_done, ch, hold, packlen, preload, optval, error;
+	long long ltmp;
+	const char *errstr;
+	int almost_done, ch, hold, packlen, preload, optval, error, fib, numfibs;
+	size_t fiblen = sizeof(int);
+
 	int nig_oldmcprefix = -1;
 	u_char *datap;
 	char *e, *target, *ifname = NULL, *gateway = NULL;
@@ -311,7 +316,7 @@ ping6(int argc, char *argv[])
 	intvl.tv_sec = interval / 1000;
 	intvl.tv_nsec = interval % 1000 * 1000000;
 
-	alarmtimeout = preload = 0;
+	alarmtimeout = preload = fib = 0;
 	datap = &outpack[ICMP6ECHOLEN + ICMP6ECHOTMLEN];
 	capdns = capdns_setup();
 
@@ -341,7 +346,7 @@ ping6(int argc, char *argv[])
 				case 'c':
 				case 'C':
 					naflags |= NI_NODEADDR_FLAG_COMPAT;
-					break;
+					break;			
 				case 'l':
 				case 'L':
 					naflags |= NI_NODEADDR_FLAG_LINKLOCAL;
@@ -402,6 +407,19 @@ ping6(int argc, char *argv[])
 			break;
 		case 'd':
 			options |= F_SO_DEBUG;
+			break;
+		case 'F':
+			if (sysctlbyname("net.fibs", &numfibs, &fiblen, NULL, 0) == -1)
+					errx(1, "Multiple FIBS not supported");
+		
+			ltmp = strtonum(optarg, 0, numfibs-1, &errstr);
+	
+			if (errstr != NULL) {
+				errx(EX_USAGE, "invalid FIB number: `%s'",
+					optarg);
+			}
+			fib = ltmp;
+			options |= F_SO_FIB;
 			break;
 		case 'f':
 			if (getuid()) {
@@ -773,12 +791,21 @@ ping6(int argc, char *argv[])
 			err(1, "IPV6_DONTFRAG");
 	hold = 1;
 
+	
 	if (options & F_SO_DEBUG) {
 		(void)setsockopt(ssend, SOL_SOCKET, SO_DEBUG, (char *)&hold,
 		    sizeof(hold));
 		(void)setsockopt(srecv, SOL_SOCKET, SO_DEBUG, (char *)&hold,
 		    sizeof(hold));
 	}
+	
+	if (options & F_SO_FIB) {
+		(void)setsockopt(ssend, SOL_SOCKET, SO_FIB, (char *)&fib, 
+			sizeof(fib));
+		(void)setsockopt(srecv, SOL_SOCKET, SO_FIB, (char *)&fib, 
+			sizeof(fib));
+	}
+	
 	optval = IPV6_DEFHLIM;
 	if (IN6_IS_ADDR_MULTICAST(&dst.sin6_addr))
 		if (setsockopt(ssend, IPPROTO_IPV6, IPV6_MULTICAST_HOPS,

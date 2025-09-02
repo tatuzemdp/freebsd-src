@@ -47,7 +47,7 @@
 #else
  #define PING6ADDOPTS
 #endif
-#define PING6OPTS ".::6Aab:C:c:Dde:fHI:i:k:l:m:nNoOp:qS:s:t:uvyYW:z:" PING6ADDOPTS
+#define PING6OPTS ".::6Aab:C:c:Dde:F:fHI:i:k:l:m:nNoOp:qS:s:t:uvyYW:z:" PING6ADDOPTS
 
 /* various options */
 extern u_int options;
